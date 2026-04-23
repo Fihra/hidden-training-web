@@ -3,6 +3,9 @@ let video;
 let hands = [];
 let hydra;
 
+const trail = [];
+const MAX_TRAIL = 20;
+
 let swordImg = new Image();
 swordImg.src = 'kris_sword.png';
 swordImg.onload = () => console.log('sword loaded ok');
@@ -39,6 +42,43 @@ const ctx = dotCanvas.getContext('2d');
     ];
     return fingers.every(f => kps[f.tip].y > kps[f.base].y);
   }
+
+function updateTrail(hand) {
+    const wrist = hand.keypoints[0];
+    trail.push({ x: wrist.x, y: wrist.y});
+    if(trail.length > MAX_TRAIL) trail.shift();
+}
+
+function drawTrail(){
+    if(trail.length < 2) return;
+
+    for(let i = 1; i < trail.length; i++){
+        const alpha = i / trail.length;
+        const width = alpha * 12;
+        const a = trail[i - 1];
+        const b = trail[i];
+
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = `rgba(255, 80, 0, ${alpha * 0.3})`;
+        ctx.lineWidth = width * 2.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+    }
+
+
+
+}
+
 
 async function setup() {
 //   let cnv = createCanvas(640, 480);
@@ -135,9 +175,13 @@ function draw() {
 
         if(fist) {
             osc(40, 0.05, 2).color(1, 0, 0).rotate(0.5).mult(src(s0), 0.7).layer(src(s1)).out();
+            updateTrail(hand);
         } else {
             src(s0).blend(osc(10, 0.1, 1.5).color(0.5, 0.3, 1), 0.3).layer(src(s1)).out();
+            trail.length = 0;
         }
+
+        drawTrail();
 
         if(fist) drawWeapon(hand);
 
