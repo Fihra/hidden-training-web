@@ -1,35 +1,24 @@
 let handPose;
 let video;
 let hands = [];
-let hydra;
+
+let mp4video;
 
 const trail = [];
-const MAX_TRAIL = 20;
+const MAX_TRAIL = 20;   
 
-let swordImg = new Image();
-swordImg.src = 'kris_sword.png';
-swordImg.onload = () => console.log('sword loaded ok');
-swordImg.onerror = () => console.error('sword failed — check filename/path');
+let swordImg;
+// let swordImg = new Image();
+// swordImg.src = 'kris_sword.png';
+// swordImg.onload = () => console.log('sword loaded ok');
+// swordImg.onerror = () => console.error('sword failed — check filename/path');
 
-const dotCanvas = document.createElement('canvas');
-dotCanvas.width = 640;
-dotCanvas.height = 480;
-const ctx = dotCanvas.getContext('2d');
+// const dotCanvas = document.createElement('canvas');
 
-// const overlay = document.getElementById('overlay').getContext('2d');
-  hydra = new Hydra({
-    canvas: document.getElementById("hydra-canvas"),
-    detectAudio: false,
-    makeGlobal: true
-  })
+// dotCanvas.width = 640;
+// dotCanvas.height = 480;
+// const ctx = dotCanvas.getContext('2d');
 
-
-  function waitForPlaying(videoEl){
-    return new Promise(resolve => {
-        if(!videoEl.paused && videoEl.readyState >= 3) return resolve();
-        videoEl.addEventListener('playing', resolve, { once: true});
-    })
-  }
 
   function isFist(hand) {
     const kps = hand.keypoints;
@@ -54,87 +43,65 @@ function drawTrail(){
 
     for(let i = 1; i < trail.length; i++){
         const alpha = i / trail.length;
-        const width = alpha * 12;
+        const w = alpha * 12;
         const a = trail[i - 1];
         const b = trail[i];
 
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = `rgba(255, 80, 0, ${alpha * 0.3})`;
-        ctx.lineWidth = width * 2.5;
-        ctx.lineCap = 'round';
-        ctx.stroke();
+        stroke(255, 80, 0, alpha * 80);
+        strokeWeight(w * 2.5);
+        line(a.x, a.y, b.x, b.y);
 
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
-        ctx.lineWidth = width;
-        ctx.lineCap = 'round';
-        ctx.stroke();
+        stroke(255, 255, 255, alpha * 230);
+        strokeWeight(w);
+        line(a.x, a.y, b.x, b.y);
+
+        // ctx.beginPath();
+        // ctx.moveTo(a.x, a.y);
+        // ctx.lineTo(b.x, b.y);
+        // ctx.strokeStyle = `rgba(255, 80, 0, ${alpha * 0.3})`;
+        // ctx.lineWidth = width * 2.5;
+        // ctx.lineCap = 'round';
+        // ctx.stroke();
+
+        // ctx.beginPath();
+        // ctx.moveTo(a.x, a.y);
+        // ctx.lineTo(b.x, b.y);
+        // ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+        // ctx.lineWidth = width;
+        // ctx.lineCap = 'round';
+        // ctx.stroke();
     }
 
 
 
 }
 
+function handleVideo(){
+    mp4video.size(200, 400);
+    mp4video.volume(0);
+    mp4video.autoplay();
+}
+
 
 async function setup() {
 //   let cnv = createCanvas(640, 480);
 
-// swordImg = await loadImage("kris_sword.png");
-
-createCanvas(1,  1);
+swordImg = await loadImage("kris_sword.png");
+createCanvas(640, 480);
 //   cnv.elt.style.background = 'transparent';
 
   handPose = await ml5.handPose();
   video = createCapture(VIDEO);
-//   video = await createCapture(VIDEO, () => {
-//     s0.initVideo(video.elt);
-//     src(s0)
-//         .blend(osc(10, 0.1, 1.5).color(0.5, 0.3, 1), 0.5)
-//         .out();
-//   });
+
   video.size(640, 480);
   video.hide();
 
-    await waitForPlaying(video.elt);
-
-    s0.initVideo(video.elt);
-    s1.init({ src: dotCanvas})
-
-    //   src(s0)
-    //     .layer(src(s1))
-    //     .out();
-    src(s0)
-    .mult(osc(10, 0.1, 0.5).color(0.5, 0.3, 1), 0.4)
-    .layer(src(s1))
-    .out();
+  mp4video = createVideo("eskrima.mp4", handleVideo);
+//   mp4video.size(300, 500);
+  mp4video.loop();
+  mp4video.hide();
 
     handPose.detectStart(video, gotHands);
-
-
-//   await s0.initCam();
-//   s1.init({src: dotCanvas});
-
-
-
-    // video.elt.onloadedmetadata = () => {
-    //     video.elt.play();
-    // };
-    // video.elt.onplaying = () => {
-    //     s0.initVideo(video.elt);
-    //     s1.init({ src: dotCanvas})
-    //     src(s0)
-    //     .blend(osc(10, 0.1, 1.5).color(0.5, 0.3, 1), 0.5)
-    //     .layer(src(s1))
-    //     .out();
-    // }
-
-
-
-
 
 }
 
@@ -156,28 +123,42 @@ function drawWeapon(hand){
     const gripX = (wrist.x + middleMCP.x) /2;
     const gripY = (wrist.y + middleMCP.y) /2;
 
-    ctx.save();
-    // ctx.translate(wrist.x, wrist.y);
-    ctx.translate(gripX, gripY);
-    ctx.rotate(angle);
-    ctx.drawImage(swordImg, -imgW / 2, -imgH * 0.75, imgW, imgH);
-    ctx.restore();
+    push();
+    translate(gripX, gripY);
+    rotate(angle);
+    imageMode(CENTER);
+    image(swordImg, 0, -imgH * 0.25, imgW, imgH);
+    pop();
+
+    // ctx.save();
+    // // ctx.translate(wrist.x, wrist.y);
+    // ctx.translate(gripX, gripY);
+    // ctx.rotate(angle);
+    // ctx.drawImage(swordImg, -imgW / 2, -imgH * 0.75, imgW, imgH);
+    // ctx.restore();
 }
 
 function draw() {
-    ctx.clearRect(0, 0, 640, 480);
+    // ctx.clearRect(0, 0, 640, 480);
     // clear();
 //   background(220);
-    // image(video, 0, 0);
+    image(video, 0, 0);
+    image(mp4video, 500, 0);
+
+    mp4video.loadPixels();
+    for(let y = 0; y < mp4video.height; y +=10){
+        for(let x = 0; x < mp4video.width; x += 5){
+            let offset = ((y* mp4video.width) + x) * 4;
+            rect(x, y, 10, 10 * (mp4video.pixels[offset + 1]/ 255));
+        }
+    }
     
     for(let hand of hands){
         const fist = isFist(hand);
 
         if(fist) {
-            osc(40, 0.05, 2).color(1, 0, 0).rotate(0.5).mult(src(s0), 0.7).layer(src(s1)).out();
             updateTrail(hand);
         } else {
-            src(s0).blend(osc(10, 0.1, 1.5).color(0.5, 0.3, 1), 0.3).layer(src(s1)).out();
             trail.length = 0;
         }
 
@@ -185,15 +166,14 @@ function draw() {
 
         if(fist) drawWeapon(hand);
 
-
         for(let kp of hand.keypoints){
-            // fill(255,0,0);
-            // noStroke();
-            // circle(kp.x, kp.y, 10);
-            ctx.beginPath();
-            ctx.arc(kp.x, kp.y, 5, 0, Math.PI * 2);
-            ctx.fillStyle = 'green';
-            ctx.fill();
+            fill(255,0,0);
+            noStroke();
+            circle(kp.x, kp.y, 10);
+            // ctx.beginPath();
+            // ctx.arc(kp.x, kp.y, 5, 0, Math.PI * 2);
+            // ctx.fillStyle = 'green';
+            // ctx.fill();
         }
 
         // for(let [a, b] of handPose.getConnections()){
