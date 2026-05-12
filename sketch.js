@@ -119,7 +119,6 @@
         // handPose.detectStart(cam, gotHands);
 
         cam = createCapture(VIDEO, () => {
-        // camera is ready, now load and start handpose
             ml5.handPose(cam, { flipped: false }, (model) => {
                 handPose = model;
                 handPose.detectStart(cam, gotHands);
@@ -127,13 +126,6 @@
         });
         cam.size(width, height);
         cam.hide();
-
-    //       mp4video = createVideo(["videos/eskrima.mp4"]);
-    //     mp4video.volume(0);
-
-    //       // mp4video.autoplay();
-    //     mp4video.loop();
-    //     mp4video.hide();
 
         synths = {
         RIGHT:  new Tone.Synth({ oscillator: { type: "square" },  envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } }).toDestination(),
@@ -150,7 +142,6 @@
         let btn = createButton("connect serial");
         btn.mousePressed(async () => {
         await Tone.start();
-        // mp4video.play();
             for (let i = 0; i < videos.length; i++) {
         videos[i].play();
     }
@@ -170,35 +161,35 @@
     }
 
     function findStickTip() {
-  if (!cam || cam.elt.readyState < 2) return;
-  cam.loadPixels();
+        if (!cam || cam.elt.readyState < 2) return;
+        cam.loadPixels();
 
-  let sumX = 0, sumY = 0, count = 0;
+        let sumX = 0, sumY = 0, count = 0;
 
-  // sample every 4th pixel for performance
-  for (let i = 0; i < cam.pixels.length; i += 16) {
-    let r = cam.pixels[i];
-    let g = cam.pixels[i + 1];
-    let b = cam.pixels[i + 2];
+        // sample every 4th pixel for performance
+        for (let i = 0; i < cam.pixels.length; i += 16) {
+            let r = cam.pixels[i];
+            let g = cam.pixels[i + 1];
+            let b = cam.pixels[i + 2];
 
-    let dist = abs(r - targetR) + abs(g - targetG) + abs(b - targetB);
-    if (dist < colorThreshold) {
-      let idx = (i / 4);
-      sumX += idx % cam.width;
-      sumY += floor(idx / cam.width);
-      count++;
+            let dist = abs(r - targetR) + abs(g - targetG) + abs(b - targetB);
+            if (dist < colorThreshold) {
+                let idx = (i / 4);
+                sumX += idx % cam.width;
+                sumY += floor(idx / cam.width);
+                count++;
+            }   
+        }
+
+        if (count > 30) {
+            // map from cam coords to canvas coords
+            stickTipX = map(sumX / count, 0, cam.width,  0, width);
+            stickTipY = map(sumY / count, 0, cam.height, 0, height);
+            stickFound = true;
+        } else {
+            stickFound = false;
+        }
     }
-  }
-
-  if (count > 30) {
-    // map from cam coords to canvas coords
-    stickTipX = map(sumX / count, 0, cam.width,  0, width);
-    stickTipY = map(sumY / count, 0, cam.height, 0, height);
-    stickFound = true;
-  } else {
-    stickFound = false;
-  }
-}
 
     function triggerSound(sideName) {
         let s = synths[sideName];
