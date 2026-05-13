@@ -2,7 +2,6 @@
     let buf = "";
     let side = "NONE";
     let lastTriggeredSide = "NONE";  // tracks what we already played
-    let synths = {};
 
     let forestImg;
     let fieldImg;
@@ -57,8 +56,6 @@
 
     let bolo;
     let sickle;
-
-
     let krisSword;
     let stickTipX = 0, stickTipY = 0;
     let stickFound = false;
@@ -293,15 +290,6 @@ function spawnDistortionZones(region) {
 
         currentBackground = forests[0];
 
-
-        // handPose = await ml5.handPose();
-        // cam = createCapture(VIDEO);
-
-        // cam.size(640, 480);
-        // cam.hide();
-
-        // handPose.detectStart(cam, gotHands);
-
         cam = createCapture(VIDEO, () => {
             ml5.handPose(cam, { flipped: false }, (model) => {
                 handPose = model;
@@ -311,21 +299,8 @@ function spawnDistortionZones(region) {
         cam.size(width, height);
         cam.hide();
 
-        synths = {
-        RIGHT:  new Tone.Synth({ oscillator: { type: "square" },  envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } }).toDestination(),
-        LEFT:   new Tone.Synth({ oscillator: { type: "sawtooth" }, envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.2 } }).toDestination(),
-        TOP:    new Tone.Synth({ oscillator: { type: "sine" },    envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.3 } }).toDestination(),
-        BOTTOM: new Tone.NoiseSynth({ noise: { type: "brown" },   envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.1 } }).toDestination(),
-        FRONT:  new Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 }, modulationIndex: 16, resonance: 4000, octaves: 1.5 }).toDestination(),
-        BACK:   new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.05, decay: 0.5, sustain: 0, release: 0.4 } }).toDestination(),
-        };
-
-        const notes = { RIGHT: "C4", LEFT: "G3", TOP: "Eb5", BOTTOM: null, FRONT: null, BACK: "Ab3" };
-        for (let s in synths) synths[s]._note = notes[s];
-
         let btn = createButton("connect serial");
         btn.mousePressed(async () => {
-        await Tone.start();
             for (let i = 0; i < videos.length; i++) {
         videos[i].play();
     }
@@ -452,20 +427,6 @@ function drawBeachGrain() {
         }
     }
 
-    function triggerSound(sideName) {
-        let s = synths[sideName];
-        if (!s) return;
-        console.log("triggering:", sideName);   // confirm this fires
-
-        if (s instanceof Tone.NoiseSynth) {
-        s.triggerAttackRelease("8n");
-        } else if (s instanceof Tone.MetalSynth) {
-        s.triggerAttackRelease("16n");
-        } else {
-        s.triggerAttackRelease(s._note, "8n");
-        }
-    }
-
     function onData(chunk) {
         buf += chunk;
         let lines = buf.split("\n");
@@ -483,8 +444,6 @@ function drawBeachGrain() {
             let incoming = parts[3].trim();
             // console.log("incoming side:", incoming);
 
-
-            // Trigger sound HERE — only on new hit, not in draw()
             if (incoming !== "NONE" && incoming !== lastTriggeredSide) {
                 hitCounter++;
 
@@ -495,7 +454,6 @@ function drawBeachGrain() {
                 }
 
                 if(hitCounter >= techniques[currentVideoIndex].count){
-                    triggerSound(incoming);
                     imageSwitch = !imageSwitch;
                     lastTriggeredSide = incoming;
 
