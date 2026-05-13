@@ -12,10 +12,12 @@
     let fields = [];
     let beaches = [];
 
+    let bloodMarks = [];
+    let bloodSplat;
+
     let imageSwitch = false;
 
     let videos = [];
-    let mp4video;
     let currentVideoIndex = 0;
 
     let currentBackground;
@@ -38,10 +40,18 @@
     let hitLeft = false;
     let hitRight = false;
 
+    let weaponTrail = [];
+    let lastWeaponTipX = 0;
+    let lastWeaponTipY = 0;
+
     let shakeRegion = null;   // "LEFT", "RIGHT", "TOP", or null
     let shakeTimer = 0;
     let shakeDuration = 20;   // frames
     let shakeAmount = 30;     // max pixel distortion
+    let distortionZones = []; // replaces single shakeRegion logic
+
+    let grainBuffer;
+    let grainTimer = 0;
 
     let currentTechniqueIndex = 0;
 
@@ -71,7 +81,180 @@
     let cam;
     let hands = [];
 
-      function isFist(hand) {
+
+    function drawBloodMarks() {
+        for (let b of bloodMarks) {
+            push();
+            translate(b.x, b.y);
+            rotate(b.angle);
+            noStroke();
+
+            // main splat
+            fill(139, 0, 0, b.alpha);
+            ellipse(0, 0, b.size, b.size * 0.6);
+
+            // drips
+            for (let d of b.drips) {
+                fill(100, 0, 0, b.alpha);
+                ellipse(d.x, d.y, d.w, d.h);
+            }
+
+            // droplets
+            for (let dp of b.droplets) {
+                fill(160, 10, 10, b.alpha);
+                ellipse(dp.x, dp.y, dp.r, dp.r);
+            }
+
+            pop();
+
+            // slowly fade out
+            b.alpha -= 0.3;
+        }
+
+        // remove fully faded marks
+        bloodMarks = bloodMarks.filter(b => b.alpha > 0);
+    }
+
+    function spawnBloodMark() {
+    let drips = [];
+    for (let i = 0; i < int(random(3, 7)); i++) {
+        drips.push({
+            x: random(-40, 40),
+            y: random(10, 60),
+            w: random(6, 14),
+            h: random(15, 35)
+        });
+    }
+
+    let droplets = [];
+    for (let i = 0; i < int(random(6, 12)); i++) {
+        droplets.push({
+            x: random(-80, 80),
+            y: random(-60, 60),
+            r: random(4, 14)
+        });
+    }
+
+    bloodMarks.push({
+        x: random(100, width - 100),
+        y: random(100, height - 100),
+        angle: random(TWO_PI),
+        size: random(60, 140),
+        alpha: 220,
+        drips,
+        droplets
+    });
+}
+
+function updateAndDrawTrail() {
+    // fade and shrink each particle
+    for (let i = weaponTrail.length - 1; i >= 0; i--) {
+        let p = weaponTrail[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.92;
+        p.vy *= 0.92;
+        p.alpha -= p.decay;
+        p.size  *= 0.93;
+
+        if (p.alpha <= 0 || p.size < 0.5) {
+            weaponTrail.splice(i, 1);
+            continue;
+        }
+
+        noStroke();
+        fill(p.r, p.g, p.b, p.alpha);
+        ellipse(p.x, p.y, p.size, p.size);
+    }
+}
+
+function spawnTrailParticles(tipX, tipY) {
+    let speedX = tipX - lastWeaponTipX;
+    let speedY = tipY - lastWeaponTipY;
+    let speed  = sqrt(speedX * speedX + speedY * speedY);
+
+    // only emit when moving fast enough
+    if (speed < 5) {
+        lastWeaponTipX = tipX;
+        lastWeaponTipY = tipY;
+        return;
+    }
+
+    // more particles the faster you swing
+    let count = int(map(speed, 5, 80, 1, 8));
+
+    // color per environment
+    let r, g, b;
+    switch (selectedEnvironmentImage) {
+        case "field":  r = 210; g = 60;  b = 60;  break; // red-orange for sickle
+        case "forest": r = 255; g = 180; b = 0;   break; // golden for bolo
+        case "beach":  r = 100; g = 200; b = 255;  break; // icy blue for kris
+        default:       r = 255; g = 255; b = 255;  break;
+    }
+
+    for (let i = 0; i < count; i++) {
+        let scatter = speed * 0.15;
+        weaponTrail.push({
+            x:     tipX + random(-scatter, scatter),
+            y:     tipY + random(-scatter, scatter),
+            vx:    -speedX * random(0.1, 0.4) + random(-1.5, 1.5),
+            vy:    -speedY * random(0.1, 0.4) + random(-1.5, 1.5),
+            size:  random(6, 18) * map(speed, 5, 80, 0.5, 1.5),
+            alpha: random(160, 220),
+            decay: random(4, 9),
+            r, g, b
+        });
+    }
+
+    lastWeaponTipX = tipX;
+    lastWeaponTipY = tipY;
+}
+
+function spawnDistortionZones(region) {
+    distortionZones = [];
+    let zoneCount = int(random(2, 5)); // 2–4 distortion patches
+
+    for (let i = 0; i < zoneCount; i++) {
+        let zone = {};
+
+        if (region === "LEFT") {
+            // random vertical slice within the left third
+            let maxX = width / 3;
+            zone.x      = random(0, maxX * 0.5);
+            zone.w      = random(maxX * 0.3, maxX * 0.9);
+            zone.y      = random(0, height * 0.7);
+            zone.h      = random(height * 0.1, height * 0.4);
+
+        } else if (region === "RIGHT") {
+            // random vertical slice within the right third
+            let startX  = (width / 3) * 2;
+            zone.x      = random(startX, startX + width / 6);
+            zone.w      = random(width / 6, width / 3);
+            zone.y      = random(0, height * 0.7);
+            zone.h      = random(height * 0.1, height * 0.4);
+
+        } else if (region === "TOP") {
+            // random horizontal slice within the top third
+            zone.x      = random(0, width * 0.6);
+            zone.w      = random(width * 0.2, width * 0.6);
+            zone.y      = random(0, height / 6);
+            zone.h      = random(height * 0.05, height / 3);
+        }
+
+        // per-zone distortion personality
+        zone.freqX     = random(0.05, 0.2);   // horizontal wave frequency
+        zone.freqY     = random(0.05, 0.2);   // vertical wave frequency
+        zone.speedX    = random(0.5, 2.0);    // how fast it oscillates
+        zone.speedY    = random(0.5, 2.0);
+        zone.shearAmt  = random(0.02, 0.08);  // shear / skew strength
+        zone.blockSize = int(random(2, 8));   // scanline block height
+        zone.glitch    = random() > 0.5;      // some zones get pixel-shift glitch
+
+        distortionZones.push(zone);
+    }
+}
+
+    function isFist(hand) {
         const kps = hand.keypoints;
 
         const fingers = [
@@ -86,13 +269,14 @@
     async function setup() {
         frameRate(30);
         createCanvas(1920, 1080);
+        grainBuffer = createGraphics(width, height);
 
         forestImg = await loadImage("images/forest1.jpg");
         fieldImg = await loadImage("images/fields1.jpg");
         beachImg = await loadImage("images/beach1.jpg");
 
         krisSword = await loadImage("images/kris_sword.png");
-        bolo = await loadImage("/images/bolo.png");
+        bolo = await loadImage("images/bolo.png");
         sickle = await loadImage("images/sickle.png");
         
         for (let i = 0; i < 7; i++) {
@@ -159,6 +343,83 @@
         }));
         });
     }
+
+function drawBeachGrain() {
+    // regenerate grain every 2 frames for animated noise feel
+    if (frameCount % 2 === 0) {
+        grainBuffer.clear();
+        grainBuffer.noStroke();
+
+        let grainCount = 60000;
+        for (let i = 0; i < grainCount; i++) {
+            let gx = random(width);
+            let gy = random(height);
+            let gsize = random(1.0, 5.0);
+
+            // mix of warm sandy tones, desaturated reds, and cool greys
+            // to feel like worn beach film photography
+            let colorRoll = random();
+            let r, g, b, a;
+
+            if (colorRoll < 0.3) {
+                // warm sandy grain
+                r = random(200, 255);
+                g = random(150, 200);
+                b = random(80, 130);
+                a = random(40, 90);
+            } else if (colorRoll < 0.55) {
+                // desaturated red / rust grain
+                r = random(160, 220);
+                g = random(60, 100);
+                b = random(60, 90);
+                a = random(30, 75);
+            } else if (colorRoll < 0.75) {
+                // cool grey-blue grain
+                r = random(80, 130);
+                g = random(100, 150);
+                b = random(150, 210);
+                a = random(25, 65);
+            } else if (colorRoll < 0.88) {
+                // bright white highlight specks
+                r = 255; g = 255; b = 255;
+                a = random(30, 70);
+            } else {
+                // dark shadow grain
+                r = random(10, 50);
+                g = random(10, 40);
+                b = random(10, 40);
+                a = random(40, 85);
+            }
+
+            grainBuffer.fill(r, g, b, random(12, 35));
+            grainBuffer.ellipse(gx, gy, gsize, gsize);
+        }
+
+        // add a few larger soft blobs for color wash patches
+        let blobCount = 200;
+        for (let i = 0; i < blobCount; i++) {
+            let bx = random(width);
+            let by = random(height);
+            let bsize = random(20, 120);
+            let colorRoll = random();
+            let r, g, b;
+
+            if (colorRoll < 0.4) {
+                r = random(180, 230); g = random(100, 150); b = random(50, 90);
+            } else if (colorRoll < 0.7) {
+                r = random(140, 190); g = random(50, 90);  b = random(50, 80);
+            } else {
+                r = random(60, 120);  g = random(80, 130); b = random(140, 200);
+            }
+
+            grainBuffer.fill(r, g, b, random(3, 12));
+            grainBuffer.ellipse(bx, by, bsize, bsize * random(0.4, 1.0));
+        }
+    }
+
+    // draw the grain buffer on top of the scene
+    image(grainBuffer, 0, 0);
+}
 
     function findStickTip() {
         if (!cam || cam.elt.readyState < 2) return;
@@ -230,15 +491,21 @@
                 if (incoming === "LEFT" || incoming === "RIGHT" || incoming === "TOP") {
                     shakeRegion = incoming;
                     shakeTimer = shakeDuration;
+                    spawnDistortionZones(incoming); 
                 }
 
                 if(hitCounter >= techniques[currentVideoIndex].count){
                     triggerSound(incoming);
                     imageSwitch = !imageSwitch;
                     lastTriggeredSide = incoming;
+
+                    if (selectedEnvironmentImage === "beach") {
+                        spawnBloodMark();
+                        drawBeachGrain();
+                    }
                     
                     //   currentFieldsIndex = (currentFieldsIndex + 1) % fields.length;
-                    let randomNum = int(random(0, 2));
+                    let randomNum = int(random(0, 3));
 
                     //create randomNum to select a random pictures set
                     // but keep incrementing all picture set indexes
@@ -258,7 +525,6 @@
                         default:
                             break;
                     }
-
 
                     currentBackgroundIndex = (currentVideoIndex + 1) % videos.length;
                     nextBackgroundIndex = (currentVideoIndex + 1) % videos.length;
@@ -307,7 +573,7 @@
                     currentBackground = forests[nextBackgroundIndex];
                     return image(forests[nextBackgroundIndex], 0, 0, width, height);
                 case "beach":
-                    currentBackground = beaches[nextBackgroudIndex];
+                    currentBackground = beaches[nextBackgroundIndex];
                     return image(beaches[nextBackgroundIndex], 0, 0, width, height);
                 default:
                     break;
@@ -345,7 +611,7 @@
             // image(fields[nextFieldIndex], 0, 0, width, height);
             showEnvironmentBackground("next");
 
-            backgroundAlpha += 75;
+            backgroundAlpha += 100;
             if(backgroundAlpha >= 255){
                 backgroundAlpha = 255;
                 // currentFieldsIndex = nextFieldIndex;
@@ -355,55 +621,67 @@
         }
         noTint();
 
-        if (shakeTimer > 0) {
-        let progress = shakeTimer / shakeDuration;        // 1.0 → 0.0
-        let amount = shakeAmount * progress;              // fades out as timer drops
+        if(selectedEnvironmentImage === "beach"){
+            drawBloodMarks();
+        }
 
-        if (shakeRegion === "LEFT") {
-            // distort left third of screen
-            let regionW = width / 3;
-            for (let row = 0; row < height; row += 4) {
-            let offset = sin(row * 0.1 + shakeTimer * 0.8) * amount;
-            copy(
-                // fields[currentFieldsIndex],
-                currentBackground,
-                0, row, regionW, 4,           // source: left strip
-                offset, row, regionW, 4       // dest: shifted
-            );
+    if (shakeTimer > 0) {
+        let progress = shakeTimer / shakeDuration;   // 1.0 → 0.0
+        let amount   = shakeAmount * progress;
+
+        for (let zone of distortionZones) {
+            let bSize = zone.blockSize;
+
+            for (let row = zone.y; row < zone.y + zone.h; row += bSize) {
+                // wave distortion — horizontal offset
+                let waveX = sin(row * zone.freqX + shakeTimer * zone.speedX) * amount;
+
+                // shear — offset grows with distance from zone top
+                let shearX = (row - zone.y) * zone.shearAmt * amount * 0.5;
+
+                // vertical ripple — shifts rows up/down slightly
+                let waveY = cos(row * zone.freqY + shakeTimer * zone.speedY) * (amount * 0.3);
+
+                // glitch: random horizontal block jump on some frames
+                let glitchOffset = 0;
+                if (zone.glitch && random() > 0.75) {
+                    glitchOffset = random(-amount * 1.5, amount * 1.5);
+                }
+
+                let totalOffsetX = waveX + shearX + glitchOffset;
+                let totalOffsetY = waveY;
+
+                // clamp so we don't read outside the image
+                let srcY = constrain(row + totalOffsetY, 0, height - bSize - 1);
+
+                copy(
+                    currentBackground,
+                    zone.x,               srcY,
+                    zone.w,               bSize,
+                    zone.x + totalOffsetX, row,
+                    zone.w,               bSize
+                );
             }
 
-        } else if (shakeRegion === "RIGHT") {
-            // distort right third of screen
-            let regionX = (width / 3) * 2;
-            let regionW = width / 3;
-            for (let row = 0; row < height; row += 4) {
-            let offset = sin(row * 0.1 + shakeTimer * 0.8) * amount;
-            copy(
-                // fields[currentFieldsIndex],
-                currentBackground,
-                regionX, row, regionW, 4,
-                regionX + offset, row, regionW, 4
-            );
-            }
-
-        } else if (shakeRegion === "TOP") {
-            // distort top third of screen
-            let regionH = height / 3;
-            for (let col = 0; col < width; col += 4) {
-            let offset = sin(col * 0.1 + shakeTimer * 0.8) * amount;
-            copy(
-                // fields[currentFieldsIndex],
-                currentBackground,
-                col, 0, 4, regionH,
-                col, offset, 4, regionH
-            );
+            // chromatic aberration pass — red channel shifts slightly differently
+            if (zone.glitch) {
+                for (let row = zone.y; row < zone.y + zone.h; row += bSize * 3) {
+                    let aberrationShift = sin(row * 0.08 + shakeTimer) * amount * 0.4;
+                    copy(
+                        currentBackground,
+                        zone.x, row, zone.w * 0.5, bSize,
+                        zone.x + aberrationShift, row, zone.w * 0.5, bSize
+                    );
+                }
             }
         }
 
         shakeTimer--;
-        if (shakeTimer <= 0) shakeRegion = null;
+        if (shakeTimer <= 0) {
+            shakeRegion = null;
+            distortionZones = [];
         }
-
+    }
 
         // Just visuals — no sound logic here
         // fill(232, 89, 60); noStroke();
@@ -418,7 +696,6 @@
         // text("y  " + y.toFixed(2), 300, 260);
         // text("z  " + z.toFixed(2), 450, 260);
         
-        // image(mp4video, 0, 50, 100, 100);
     // tint(255, 100); 
     // image(cam, 0, 0);
         
@@ -427,7 +704,7 @@
     if (vid && vid.elt.readyState >= 2) {
                 vid.loadPixels();
 
-                let destX = 1500, destY = 0, destW = 300, destH = 300;
+                let destX = (width / 2) - 150, destY = 0, destW = 300, destH = 300;
                 let cols = 40;
                 let rows = 40;
                 let rw = destW /cols;
@@ -493,7 +770,7 @@
 
     }
 
-    for(let hand of hands){
+    for(let hand of hands.slice(0, 1)){
         // const fist = isFist(hand);
 
         // if(fist) {
@@ -508,9 +785,9 @@
         drawWeapon(hand);
 
         for(let kp of hand.keypoints){
-            fill(255,0,0);
-            noStroke();
-            circle(kp.x, kp.y, 10);
+            // fill(255,0,0);
+            // noStroke();
+            // circle(width - kp.x, kp.y, 10);
             // ctx.beginPath();
             // ctx.arc(kp.x, kp.y, 5, 0, Math.PI * 2);
             // ctx.fillStyle = 'green';
@@ -518,53 +795,92 @@
             
         }
     }
+     updateAndDrawTrail();
 
 }
 
 
-function drawWeapon(hand){
+function drawWeapon(hand) {
     const kps = hand.keypoints;
     const wrist = kps[0];
     const middleMCP = kps[9];
 
-    const angle = Math.atan2(
-        middleMCP.y - wrist.y,
-        middleMCP.x - wrist.x
-    ) + Math.PI /2 ;
+    // mirror X coords to match flipped camera view
+    const wristX     = width - wrist.x;
+    const wristY     = wrist.y;
+    const middleX    = width - middleMCP.x;
+    const middleY    = middleMCP.y;
 
-    const imgW = 300;
-    const imgH = 600;
+    // angle from wrist to middle knuckle
+    const handAngle = Math.atan2(
+        middleY - wristY,
+        middleX - wristX
+    );
 
-    const gripX = (wrist.x + middleMCP.x) /2;
-    const gripY = (wrist.y + middleMCP.y) /2;
+    // anchor at wrist
+    const gripX = wristX;
+    const gripY = wristY;
 
     push();
     translate(gripX, gripY);
-    rotate(angle);
+    rotate(handAngle - Math.PI / 2); // rotate horizontal PNGs to point up
+
+    // flip horizontally so blade faces away from wrist (handle is on left in PNG)
+    scale(-1, 1);
+
     imageMode(CENTER);
 
-    switch(selectedEnvironmentImage){
+    let tipDist, tipX, tipY;
+
+    switch (selectedEnvironmentImage) {
         case "field":
-            image(sickle, 0, -imgH * 0.25, imgW, imgH);
+            tipDist = 210; // half of sickle imgW=420
             break;
         case "forest":
-            image(bolo, 0, -imgH * 0.25, imgW, imgH);
+            tipDist = 250; // half of bolo imgW=500
             break;
         case "beach":
-            image(krisSword, 0, -imgH * 0.25, imgW, imgH);
+            tipDist = 250; // half of kris imgW=500
             break;
         default:
+            tipDist = 200;
+    }
+
+    tipX = gripX + cos(handAngle - HALF_PI) * tipDist;
+    tipY = gripY + sin(handAngle - HALF_PI) * tipDist;
+
+    spawnTrailParticles(tipX, tipY);
+
+    switch (selectedEnvironmentImage) {
+        case "field": {
+            // sickle: handle ~35% from left, landscape PNG
+            let imgW = 420, imgH = 180;
+            tipDist = 210;
+            image(sickle, 0, imgH * 0.1, imgW, imgH);
+            break;
+        }
+        case "forest": {
+            // bolo: handle ~20% from left, very wide landscape PNG
+            let imgW = 500, imgH = 190;
+            tipDist = 250;
+            image(bolo, 0, imgH * 0.1, imgW, imgH);
+            break;
+        }
+        case "beach": {
+            // kris sword: handle ~15% from left, landscape PNG
+            let imgW = 500, imgH = 160;
+            tipDist = 250;
+            image(krisSword, 0, imgH * 0.1, imgW, imgH);
+            break;
+        }
+        default:
+            tipDist = 200;
             break;
     }
-    
-    pop();
 
-    // ctx.save();
-    // // ctx.translate(wrist.x, wrist.y);
-    // ctx.translate(gripX, gripY);
-    // ctx.rotate(angle);
-    // ctx.drawImage(swordImg, -imgW / 2, -imgH * 0.75, imgW, imgH);
-    // ctx.restore();
+
+
+    pop();
 }
 
 function gotHands(results){
