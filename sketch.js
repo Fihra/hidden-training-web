@@ -126,67 +126,56 @@ function drawVideoPixelDisplay(vid) {
     }
 }
 
-    function drawBloodMarks() {
-        for (let b of bloodMarks) {
-            push();
-            translate(b.x, b.y);
-            rotate(b.angle);
-            noStroke();
-
-            // main splat
-            fill(139, 0, 0, b.alpha);
-            ellipse(0, 0, b.size, b.size * 0.6);
-
-            // drips
-            for (let d of b.drips) {
-                fill(100, 0, 0, b.alpha);
-                ellipse(d.x, d.y, d.w, d.h);
-            }
-
-            // droplets
-            for (let dp of b.droplets) {
-                fill(160, 10, 10, b.alpha);
-                ellipse(dp.x, dp.y, dp.r, dp.r);
-            }
-
-            pop();
-
-            // slowly fade out
-            b.alpha -= 0.3;
+function drawBloodMarks() {
+    noStroke();
+    let i = bloodMarks.length - 1;
+    while (i >= 0) {
+        let b = bloodMarks[i];
+        b.alpha -= 0.5;
+        if (b.alpha <= 0) {
+            bloodMarks[i] = bloodMarks[bloodMarks.length - 1];
+            bloodMarks.pop();
+            i--;
+            continue;
         }
-
-        // remove fully faded marks
-        bloodMarks = bloodMarks.filter(b => b.alpha > 0);
+        push();
+        translate(b.x, b.y);
+        rotate(b.angle);
+        fill(139, 0, 0, b.alpha);
+        ellipse(0, 0, b.size, b.size * 0.6);
+        fill(100, 0, 0, b.alpha);
+        for (let d of b.drips)     ellipse(d.x, d.y, d.w, d.h);
+        fill(160, 10, 10, b.alpha);
+        for (let dp of b.droplets) ellipse(dp.x, dp.y, dp.r, dp.r);
+        pop();
+        i--;
     }
+}
 
-    function spawnBloodMark() {
+function spawnBloodMark() {
+    if (bloodMarks.length >= 8) bloodMarks.shift(); // cap at 8
+
     let drips = [];
-    for (let i = 0; i < int(random(3, 7)); i++) {
+    for (let i = 0; i < int(random(2, 4)); i++) { // was 3-7
         drips.push({
-            x: random(-40, 40),
-            y: random(10, 60),
-            w: random(6, 14),
-            h: random(15, 35)
+            x: random(-40, 40), y: random(10, 60),
+            w: random(6, 14),   h: random(15, 35)
         });
     }
-
     let droplets = [];
-    for (let i = 0; i < int(random(6, 12)); i++) {
+    for (let i = 0; i < int(random(3, 6)); i++) { // was 6-12
         droplets.push({
-            x: random(-80, 80),
-            y: random(-60, 60),
+            x: random(-80, 80), y: random(-60, 60),
             r: random(4, 14)
         });
     }
-
     bloodMarks.push({
         x: random(100, width - 100),
         y: random(100, height - 100),
         angle: random(TWO_PI),
         size: random(60, 140),
         alpha: 220,
-        drips,
-        droplets
+        drips, droplets
     });
 }
 
