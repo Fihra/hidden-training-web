@@ -73,11 +73,16 @@
         {"name": "Arko", "count": 4}
     ]
 
-
     let handPose;
     let cam;
     let hands = [];
 
+    // Add to globals
+    let lastKnownWristX = -1;
+    let lastKnownWristY = -1;
+    let lastKnownAngle  = 0;
+    let handLostTimer   = 0;
+    const HAND_PERSIST_FRAMES = 20;
 
     function drawBloodMarks() {
         for (let b of bloodMarks) {
@@ -283,6 +288,7 @@ function spawnDistortionZones(region) {
             fields[i] = await loadImage(`images/fields${i}.jpg`);
             // Assuming you have video1.mp4, video2.mp4, etc.
             videos[i] = createVideo(['videos/eskrima' + i + '.mp4']);
+            videos[i].speed(0.3);
             videos[i].volume(0);
             videos[i].hide(); // Hide HTML elements
             videos[i].loop(); // Loop them    
@@ -291,7 +297,11 @@ function spawnDistortionZones(region) {
         currentBackground = forests[0];
 
         cam = createCapture(VIDEO, () => {
-            ml5.handPose(cam, { flipped: false }, (model) => {
+            ml5.handPose(cam, { flipped: false,
+                minDetectionConfidence: 0.3,
+                minTrackingConfidence: 0.3
+
+             }, (model) => {
                 handPose = model;
                 handPose.detectStart(cam, gotHands);
             });
@@ -728,30 +738,16 @@ function drawBeachGrain() {
 
     }
 
-    for(let hand of hands.slice(0, 1)){
-        // const fist = isFist(hand);
+    // for(let hand of hands.slice(0, 1)){
+    //     drawWeapon(hand);
+    // }
 
-        // if(fist) {
-        //     updateTrail(hand);
-        // } else {
-        //     trail.length = 0;
-        // }
-
-        // drawTrail();
-
-        // if(fist) drawWeapon(hand);
-        drawWeapon(hand);
-
-        for(let kp of hand.keypoints){
-            // fill(255,0,0);
-            // noStroke();
-            // circle(width - kp.x, kp.y, 10);
-            // ctx.beginPath();
-            // ctx.arc(kp.x, kp.y, 5, 0, Math.PI * 2);
-            // ctx.fillStyle = 'green';
-            // ctx.fill();
-            
-        }
+    if (hands.length > 0) {
+        drawWeapon(hands[0]);
+        handLostTimer = HAND_PERSIST_FRAMES;
+    } else if (handLostTimer > 0) {
+        drawWeaponAtPosition(lastKnownWristX, lastKnownWristY, lastKnownAngle);
+        handLostTimer--;
     }
      updateAndDrawTrail();
 
@@ -760,84 +756,130 @@ function drawBeachGrain() {
 
 function drawWeapon(hand) {
     const kps = hand.keypoints;
-    const wrist = kps[0];
-    const middleMCP = kps[9];
+    // const wrist = kps[0];
+    // const middleMCP = kps[9];
 
-    // mirror X coords to match flipped camera view
-    const wristX     = width - wrist.x;
-    const wristY     = wrist.y;
-    const middleX    = width - middleMCP.x;
-    const middleY    = middleMCP.y;
+    // // mirror X coords to match flipped camera view
+    // const wristX     = width - wrist.x;
+    // const wristY     = wrist.y;
+    // const middleX    = width - middleMCP.x;
+    // const middleY    = middleMCP.y;
 
-    // angle from wrist to middle knuckle
-    const handAngle = Math.atan2(
-        middleY - wristY,
-        middleX - wristX
-    );
+    // // angle from wrist to middle knuckle
+    // const handAngle = Math.atan2(
+    //     middleY - wristY,
+    //     middleX - wristX
+    // );
 
-    // anchor at wrist
-    const gripX = wristX;
-    const gripY = wristY;
+    const wristX  = width - kps[0].x;
+    const wristY  = kps[0].y;
 
-    push();
-    translate(gripX, gripY);
-    rotate(handAngle - Math.PI / 2); // rotate horizontal PNGs to point up
+    // use index MCP (kps[5]) instead of middle MCP (kps[9])
+    // — stays more visible when fingers wrap around a stick
+    const indexX  = width - kps[5].x;
+    const indexY  = kps[5].y;
 
-    // flip horizontally so blade faces away from wrist (handle is on left in PNG)
-    scale(-1, 1);
+    // secondary anchor: pinky MCP (kps[17]) for a grip-stable angle
+    // average index and pinky base to get the knuckle ridge direction
+    const pinkyX  = width - kps[17].x;
+    const pinkyY  = kps[17].y;
 
-    imageMode(CENTER);
+    const knuckleX = (indexX + pinkyX) / 2;
+    const knuckleY = (indexY + pinkyY) / 2;
 
-    let tipDist, tipX, tipY;
+    const handAngle = Math.atan2(knuckleY - wristY, knuckleX - wristX);
+
+    // define all weapon params up front
+    // let img, imgW, imgH, handlePct;
 
     switch (selectedEnvironmentImage) {
         case "field":
-            tipDist = 210; // half of sickle imgW=420
+            img = sickle;
+            imgW = 420; imgH = 180;
+            handlePct = 0.35;
             break;
         case "forest":
-            tipDist = 250; // half of bolo imgW=500
+            img = bolo;
+            imgW = 500; imgH = 190;
+            handlePct = 0.20;
             break;
         case "beach":
-            tipDist = 250; // half of kris imgW=500
+            img = krisSword;
+            imgW = 500; imgH = 160;
+            handlePct = 0.15;
             break;
         default:
-            tipDist = 200;
+            return; // nothing to draw
     }
+        // cache for persistence when hand is lost
+    lastKnownWristX = wristX;
+    lastKnownWristY = wristY;
+    lastKnownAngle  = handAngle;
 
-    tipX = gripX + cos(handAngle - HALF_PI) * tipDist;
-    tipY = gripY + sin(handAngle - HALF_PI) * tipDist;
+    drawWeaponAtPosition(wristX, wristY, handAngle);
 
-    spawnTrailParticles(tipX, tipY);
+    // // blade tip is the portion of the image beyond the handle
+    // const tipDist = imgW * (1.0 - handlePct);
+
+    // // world-space tip position for trail
+    // const tipX = wristX + cos(handAngle - HALF_PI) * tipDist;
+    // const tipY = wristY + sin(handAngle - HALF_PI) * tipDist;
+    // spawnTrailParticles(tipX, tipY);
+
+    // // draw weapon
+    // push();
+    //     translate(wristX, wristY);
+    //     rotate(handAngle - HALF_PI);
+    //     scale(-1, 1);
+    //     imageMode(CORNER);
+    //     // handle sits at local origin (wrist), blade extends upward (-Y)
+    //     image(img, -(imgW * handlePct), imgH, imgW, imgH);
+    // pop();
+}
+
+function drawWeaponAtPosition(wristX, wristY, handAngle) {
+    if (wristX < 0) return;
+
+    let img, imgW, imgH, handlePct;
+    let offsetX = 0, offsetY = 0;
 
     switch (selectedEnvironmentImage) {
-        case "field": {
-            // sickle: handle ~35% from left, landscape PNG
-            let imgW = 420, imgH = 180;
-            tipDist = 210;
-            image(sickle, 0, imgH * 0.1, imgW, imgH);
+        case "field":
+            img = sickle;
+            imgW = 420; imgH = 180;
+            handlePct = 0.35;
+            offsetY = 0;   // tune: negative = toward fingertips
             break;
-        }
-        case "forest": {
-            // bolo: handle ~20% from left, very wide landscape PNG
-            let imgW = 500, imgH = 190;
-            tipDist = 250;
-            image(bolo, 0, imgH * 0.1, imgW, imgH);
+        case "forest":
+            img = bolo;
+            imgW = 500; imgH = 190;
+            handlePct = 0.20;
+            offsetY = 0;
             break;
-        }
-        case "beach": {
-            // kris sword: handle ~15% from left, landscape PNG
-            let imgW = 500, imgH = 160;
-            tipDist = 250;
-            image(krisSword, 0, imgH * 0.1, imgW, imgH);
+        case "beach":
+            img = krisSword;
+            imgW = 500; imgH = 160;
+            handlePct = 0.15;
+            offsetY = 0;
             break;
-        }
         default:
-            tipDist = 200;
-            break;
+            return;
     }
 
+    const tipDist = imgW * (1.0 - handlePct);
+    const tipX = wristX + cos(handAngle - HALF_PI) * tipDist;
+    const tipY = wristY + sin(handAngle - HALF_PI) * tipDist;
+    spawnTrailParticles(tipX, tipY);
 
-
+    push();
+        translate(wristX, wristY);
+        rotate(handAngle - HALF_PI);
+        scale(-1, 1);
+        imageMode(CORNER);
+        image(img,
+            -(imgW * handlePct) + offsetX,
+            -imgH + offsetY,
+            imgW, imgH);
     pop();
 }
 
