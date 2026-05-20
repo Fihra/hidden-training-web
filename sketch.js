@@ -382,79 +382,49 @@ function spawnDistortionZones(region) {
     }
 
 function drawBeachGrain() {
-    // regenerate grain every 2 frames for animated noise feel
-    if (frameCount % 2 === 0) {
-        grainBuffer.clear();
-        grainBuffer.noStroke();
-
-        let grainCount = 60000;
-        for (let i = 0; i < grainCount; i++) {
-            let gx = random(width);
-            let gy = random(height);
-            let gsize = random(1.0, 5.0);
-
-            // mix of warm sandy tones, desaturated reds, and cool greys
-            // to feel like worn beach film photography
-            let colorRoll = random();
-            let r, g, b, a;
-
-            if (colorRoll < 0.3) {
-                // warm sandy grain
-                r = random(200, 255);
-                g = random(150, 200);
-                b = random(80, 130);
-                a = random(40, 90);
-            } else if (colorRoll < 0.55) {
-                // desaturated red / rust grain
-                r = random(160, 220);
-                g = random(60, 100);
-                b = random(60, 90);
-                a = random(30, 75);
-            } else if (colorRoll < 0.75) {
-                // cool grey-blue grain
-                r = random(80, 130);
-                g = random(100, 150);
-                b = random(150, 210);
-                a = random(25, 65);
-            } else if (colorRoll < 0.88) {
-                // bright white highlight specks
-                r = 255; g = 255; b = 255;
-                a = random(30, 70);
-            } else {
-                // dark shadow grain
-                r = random(10, 50);
-                g = random(10, 40);
-                b = random(10, 40);
-                a = random(40, 85);
-            }
-
-            grainBuffer.fill(r, g, b, random(12, 35));
-            grainBuffer.ellipse(gx, gy, gsize, gsize);
-        }
-
-        // add a few larger soft blobs for color wash patches
-        let blobCount = 200;
-        for (let i = 0; i < blobCount; i++) {
-            let bx = random(width);
-            let by = random(height);
-            let bsize = random(20, 120);
-            let colorRoll = random();
-            let r, g, b;
-
-            if (colorRoll < 0.4) {
-                r = random(180, 230); g = random(100, 150); b = random(50, 90);
-            } else if (colorRoll < 0.7) {
-                r = random(140, 190); g = random(50, 90);  b = random(50, 80);
-            } else {
-                r = random(60, 120);  g = random(80, 130); b = random(140, 200);
-            }
-
-            grainBuffer.fill(r, g, b, random(3, 12));
-            grainBuffer.ellipse(bx, by, bsize, bsize * random(0.4, 1.0));
-        }
+    if (frameCount % 4 !== 0) {
+        // just redraw cached buffer without regenerating
+        image(grainBuffer, 0, 0);
+        return;
     }
 
-    // draw the grain buffer on top of the scene
+    grainBuffer.loadPixels();
+    const pw = grainBuffer.width;
+    const ph = grainBuffer.height;
+    const px = grainBuffer.pixels;
+
+    // clear to transparent
+    for (let i = 0; i < px.length; i += 4) {
+        px[i + 3] = 0;
+    }
+
+    const grainCount = 6000; // was 60000 ellipses — 10x cheaper
+    for (let i = 0; i < grainCount; i++) {
+        const gx  = floor(random(pw));
+        const gy  = floor(random(ph));
+        const idx = (gy * pw + gx) * 4;
+        const roll = random();
+
+        let r, g, b;
+        if (roll < 0.3) {
+            r = random(200, 255); g = random(150, 200); b = random(80, 130);
+        } else if (roll < 0.55) {
+            r = random(160, 220); g = random(60, 100);  b = random(60, 90);
+        } else if (roll < 0.75) {
+            r = random(80, 130);  g = random(100, 150); b = random(150, 210);
+        } else if (roll < 0.88) {
+            r = 255; g = 255; b = 255;
+        } else {
+            r = random(10, 50); g = random(10, 40); b = random(10, 40);
+        }
+
+        px[idx]     = r;
+        px[idx + 1] = g;
+        px[idx + 2] = b;
+        px[idx + 3] = floor(random(12, 35));
+    }
+
+    grainBuffer.updatePixels();
     image(grainBuffer, 0, 0);
 }
 
