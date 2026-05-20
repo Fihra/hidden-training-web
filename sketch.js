@@ -19,6 +19,9 @@
     let videos = [];
     let currentVideoIndex = 0;
 
+    let vidPixelCache = new Float32Array(40 * 40);
+    let lastVidTime = -1;
+
     let currentBackground;
     let currentBackgroundIndex = 0;
 
@@ -83,6 +86,40 @@
     let lastKnownAngle  = 0;
     let handLostTimer   = 0;
     const HAND_PERSIST_FRAMES = 20;
+
+function drawVideoPixelDisplay(vid) {
+    if (!vid || vid.elt.readyState < 2) return;
+    
+    vid.loadPixels();
+    if (!vid.pixels || vid.pixels.length === 0) return;
+
+    const destX = (width / 2) - 150;
+    const destW = 300, destH = 300;
+    const cols = 40, rows = 40;
+    const rw = destW / cols;
+    const rh = destH / rows;
+    const vw = vid.width, vh = vid.height;
+
+    fill(0); noStroke();
+    rect(destX, 0, destW, destH);
+
+    fill(255); noStroke();
+    for (let row = 0; row < rows; row++) {
+        const vy = floor((row / rows) * vh);
+        const rowBase = vy * vw;
+        for (let col = 0; col < cols; col++) {
+            const vx = floor((col / cols) * vw);
+            const offset = (rowBase + vx) * 4;
+            const brightness = (
+                0.299 * vid.pixels[offset] +
+                0.587 * vid.pixels[offset + 1] +
+                0.114 * vid.pixels[offset + 2]
+            ) / 255;
+            const barH = rh * (1.0 - brightness);
+            rect(destX + col * rw, row * rh + (rh - barH), rw - 1, barH);
+        }
+    }
+}
 
     function drawBloodMarks() {
         for (let b of bloodMarks) {
@@ -315,9 +352,6 @@ function spawnDistortionZones(region) {
         videos[i].play();
     }
         
-
-        console.log("Tone started:", Tone.context.state);
-
         let port = await navigator.serial.requestPort();
         await port.open({ baudRate: 9600 });
 
@@ -444,15 +478,12 @@ function drawBeachGrain() {
 
         for (let line of lines) {
         line = line.trim().replace(/\r/g, "");
-        //   console.log("RAW LINE:", JSON.stringify(line));  // ← add this
         let parts = line.trim().split(",");
-        //   console.log("PARTS:", parts, "LENGTH:", parts.length); // ← and this
         if (parts.length === 4) {
             x = parseFloat(parts[0]);
             y = parseFloat(parts[1]);
             z = parseFloat(parts[2]);
             let incoming = parts[3].trim();
-            // console.log("incoming side:", incoming);
 
             if (incoming !== "NONE" && incoming !== lastTriggeredSide) {
                 hitCounter++;
@@ -472,7 +503,6 @@ function drawBeachGrain() {
                         drawBeachGrain();
                     }
                     
-                    //   currentFieldsIndex = (currentFieldsIndex + 1) % fields.length;
                     let randomNum = int(random(0, 3));
 
                     //create randomNum to select a random pictures set
@@ -496,7 +526,6 @@ function drawBeachGrain() {
 
                     currentBackgroundIndex = (currentVideoIndex + 1) % videos.length;
                     nextBackgroundIndex = (currentVideoIndex + 1) % videos.length;
-                    // nextFieldIndex = (currentFieldsIndex + 1) % fields.length;
                     
                     backgroundAlpha = 0;
                     transitioning = true;
@@ -509,8 +538,6 @@ function drawBeachGrain() {
                     setTimeout(() => { lastTriggeredSide = "NONE"; }, 600);
                 } 
             }
-
-            
 
             side = incoming;
             }
@@ -556,33 +583,16 @@ function drawBeachGrain() {
 
     function draw() {
         background(240);
-
-        // if(imageSwitch){
-        //   image(beachImg, 0, 0, width, height);
-        //   // tint(255, 117);
-        //   image(fieldImg, 0, 0, width, height);
-        //   // noTint();
-        // } else {
-        //   image(fieldImg, 0, 0, width, height);
-        //   // tint(255, 117);
-        //   image(beachImg, 0, 0, width, height);
-        //   // noTint();
-        // }
-
         tint(255, 255);
-        // image(fields[currentFieldsIndex], 0, 0, width, height);
-        // showCurrentEnvironmentBackground();
         showEnvironmentBackground("current");
 
         if(transitioning){
             tint(255, backgroundAlpha);
-            // image(fields[nextFieldIndex], 0, 0, width, height);
             showEnvironmentBackground("next");
 
             backgroundAlpha += 100;
             if(backgroundAlpha >= 255){
                 backgroundAlpha = 255;
-                // currentFieldsIndex = nextFieldIndex;
                 currentBackgroundIndex = nextBackgroundIndex;
                 transitioning = false;
             } 
@@ -651,69 +661,12 @@ function drawBeachGrain() {
         }
     }
 
-        // Just visuals — no sound logic here
-        // fill(232, 89, 60); noStroke();
-        // circle(150, 150, max(10, abs(x) * 20));
-        // fill(59, 139, 212);
-        // circle(300, 150, max(10, abs(y) * 20));
-        // fill(29, 158, 117);
-        // circle(450, 150, max(10, abs(z) * 20));
-
-        fill(80); textAlign(CENTER); textSize(13);
-        // text("x  " + x.toFixed(2), 150, 260);
-        // text("y  " + y.toFixed(2), 300, 260);
-        // text("z  " + z.toFixed(2), 450, 260);
+        fill(80); 
+        textAlign(CENTER); 
+        textSize(13);
         
-    // tint(255, 100); 
-    // image(cam, 0, 0);
-        
-    let vid = videos[currentVideoIndex];
-
-    if (vid && vid.elt.readyState >= 2) {
-                vid.loadPixels();
-
-                let destX = (width / 2) - 150, destY = 0, destW = 300, destH = 300;
-                let cols = 40;
-                let rows = 40;
-                let rw = destW /cols;
-                let rh = destH / rows;
-                // let stepX = 15, stepY = 15;
-
-                fill(0);
-                noStroke();
-                rect(destX, destY, destW, destH);
-
-                for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-            // sample corresponding video pixel
-            let vx = floor((col / cols) * vid.width);
-            let vy = floor((row / rows) * vid.height);
-            let offset = ((vy * vid.width) + vx) * 4;
-
-            let r = vid.pixels[offset];
-            let g = vid.pixels[offset + 1];
-            let b = vid.pixels[offset + 2];
-            let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-            let barHeight = rh * (1.0 - brightness);  // dark = tall, bright = short
-
-            let px = destX + col * rw;
-            let py = destY + (row * rh) + (rh - barHeight);  // ← anchor to bottom of cell
-
-            fill(255); noStroke();
-            rect(px, py, rw - 1, barHeight);
-            }
-        }
-    
-
-
-            // call tracker each frame
+    drawVideoPixelDisplay(videos[currentVideoIndex]);
         findStickTip();
-
-        // draw cam feed
-        if (cam && cam.elt.readyState >= 2) {
-        // image(cam, 0, 0);
-        }
 
         // draw replacement image at stick tip
         if (stickFound && stickTipImg) {
@@ -723,24 +676,14 @@ function drawBeachGrain() {
         imageMode(CORNER);  // reset back
         }
 
-
-        // debug: click to sample color at mouse position
         // remove once calibrated
         if (mouseIsPressed && cam && cam.elt.readyState >= 2) {
         cam.loadPixels();
         let mx = floor(map(mouseX, 0, width, 0, cam.width));
         let my = floor(map(mouseY, 0, height, 0, cam.height));
         let idx = ((my * cam.width) + mx) * 4;
-        console.log("R:", cam.pixels[idx], "G:", cam.pixels[idx+1], "B:", cam.pixels[idx+2]);
         }
 
-
-
-    }
-
-    // for(let hand of hands.slice(0, 1)){
-    //     drawWeapon(hand);
-    // }
 
     if (hands.length > 0) {
         drawWeapon(hands[0]);
@@ -756,21 +699,6 @@ function drawBeachGrain() {
 
 function drawWeapon(hand) {
     const kps = hand.keypoints;
-    // const wrist = kps[0];
-    // const middleMCP = kps[9];
-
-    // // mirror X coords to match flipped camera view
-    // const wristX     = width - wrist.x;
-    // const wristY     = wrist.y;
-    // const middleX    = width - middleMCP.x;
-    // const middleY    = middleMCP.y;
-
-    // // angle from wrist to middle knuckle
-    // const handAngle = Math.atan2(
-    //     middleY - wristY,
-    //     middleX - wristX
-    // );
-
     const wristX  = width - kps[0].x;
     const wristY  = kps[0].y;
 
@@ -788,9 +716,6 @@ function drawWeapon(hand) {
     const knuckleY = (indexY + pinkyY) / 2;
 
     const handAngle = Math.atan2(knuckleY - wristY, knuckleX - wristX);
-
-    // define all weapon params up front
-    // let img, imgW, imgH, handlePct;
 
     switch (selectedEnvironmentImage) {
         case "field":
@@ -817,24 +742,6 @@ function drawWeapon(hand) {
     lastKnownAngle  = handAngle;
 
     drawWeaponAtPosition(wristX, wristY, handAngle);
-
-    // // blade tip is the portion of the image beyond the handle
-    // const tipDist = imgW * (1.0 - handlePct);
-
-    // // world-space tip position for trail
-    // const tipX = wristX + cos(handAngle - HALF_PI) * tipDist;
-    // const tipY = wristY + sin(handAngle - HALF_PI) * tipDist;
-    // spawnTrailParticles(tipX, tipY);
-
-    // // draw weapon
-    // push();
-    //     translate(wristX, wristY);
-    //     rotate(handAngle - HALF_PI);
-    //     scale(-1, 1);
-    //     imageMode(CORNER);
-    //     // handle sits at local origin (wrist), blade extends upward (-Y)
-    //     image(img, -(imgW * handlePct), imgH, imgW, imgH);
-    // pop();
 }
 
 function drawWeaponAtPosition(wristX, wristY, handAngle) {
