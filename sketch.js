@@ -62,6 +62,7 @@
     let krisSword;
     let stickTipX = 0, stickTipY = 0;
     let stickFound = false;
+    let stickTipImg = null;
 
     let targetR = 0, targetG = 0, targetB = 255;
     let colorThreshold = 80;
@@ -89,6 +90,10 @@
 
 function drawVideoPixelDisplay(vid) {
     if (!vid || vid.elt.readyState < 2) return;
+
+    const currentTime = vid.elt.currentTime;
+    if (currentTime === lastVidTime) return;
+    lastVidTime = currentTime;
     
     vid.loadPixels();
     if (!vid.pixels || vid.pixels.length === 0) return;
@@ -185,29 +190,40 @@ function drawVideoPixelDisplay(vid) {
     });
 }
 
+function updateStickTipImg() {
+    switch (selectedEnvironmentImage) {
+        case "field":  stickTipImg = sickle;    break;
+        case "forest": stickTipImg = bolo;      break;
+        case "beach":  stickTipImg = krisSword; break;
+        default:       stickTipImg = null;      break;
+    }
+}
+
 function updateAndDrawTrail() {
-    // fade and shrink each particle
-    for (let i = weaponTrail.length - 1; i >= 0; i--) {
+    let i = weaponTrail.length - 1;
+    while (i >= 0) {
         let p = weaponTrail[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= 0.92;
-        p.vy *= 0.92;
+        p.x += p.vx;  p.y += p.vy;
+        p.vx *= 0.92; p.vy *= 0.92;
         p.alpha -= p.decay;
         p.size  *= 0.93;
 
         if (p.alpha <= 0 || p.size < 0.5) {
-            weaponTrail.splice(i, 1);
-            continue;
+            // swap with last element and pop — O(1) vs splice O(n)
+            weaponTrail[i] = weaponTrail[weaponTrail.length - 1];
+            weaponTrail.pop();
+        } else {
+            noStroke();
+            fill(p.r, p.g, p.b, p.alpha);
+            ellipse(p.x, p.y, p.size, p.size);
         }
-
-        noStroke();
-        fill(p.r, p.g, p.b, p.alpha);
-        ellipse(p.x, p.y, p.size, p.size);
+        i--;
     }
 }
 
 function spawnTrailParticles(tipX, tipY) {
+    if(weaponTrail.length > 150) weaponTrail.length = 100;
+
     let speedX = tipX - lastWeaponTipX;
     let speedY = tipY - lastWeaponTipY;
     let speed  = sqrt(speedX * speedX + speedY * speedY);
@@ -332,6 +348,8 @@ function spawnDistortionZones(region) {
         }
 
         currentBackground = forests[0];
+
+        updateStickTipImg();
 
         cam = createCapture(VIDEO, () => {
             ml5.handPose(cam, { flipped: false,
@@ -500,7 +518,7 @@ function drawBeachGrain() {
 
                     if (selectedEnvironmentImage === "beach") {
                         spawnBloodMark();
-                        drawBeachGrain();
+                        // drawBeachGrain();
                     }
                     
                     let randomNum = int(random(0, 3));
@@ -523,6 +541,7 @@ function drawBeachGrain() {
                         default:
                             break;
                     }
+                    updateStickTipImg();
 
                     currentBackgroundIndex = (currentVideoIndex + 1) % videos.length;
                     nextBackgroundIndex = (currentVideoIndex + 1) % videos.length;
@@ -601,6 +620,7 @@ function drawBeachGrain() {
 
         if(selectedEnvironmentImage === "beach"){
             drawBloodMarks();
+            drawBeachGrain();
         }
 
     if (shakeTimer > 0) {
@@ -666,7 +686,8 @@ function drawBeachGrain() {
         textSize(13);
         
     drawVideoPixelDisplay(videos[currentVideoIndex]);
-        findStickTip();
+        // findStickTip();
+        if(frameCount % 3 === 0) findStickTip();
 
         // draw replacement image at stick tip
         if (stickFound && stickTipImg) {
